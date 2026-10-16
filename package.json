@@ -6,9 +6,15 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test:audio": "bun scripts/check-audio-analysis.ts",
+    "test:visual": "bun scripts/check-visual-presence.ts",
+    "test:scenes": "node scripts/check-scenes.mjs",
+    "test:constellation": "bun scripts/check-constellation.ts"
   },
   "dependencies": {
+    "@phosphor-icons/react": "^2.1.10",
     "next": "16.4.2",
     "react": "19.3.0",
     "react-dom": "19.3.0"
