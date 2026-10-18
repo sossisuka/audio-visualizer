@@ -11,7 +11,10 @@
     "test:audio": "bun scripts/check-audio-analysis.ts",
     "test:visual": "bun scripts/check-visual-presence.ts",
     "test:scenes": "node scripts/check-scenes.mjs",
-    "test:constellation": "bun scripts/check-constellation.ts"
+    "test:constellation": "bun scripts/check-constellation.ts",
+    "test:playlist": "node scripts/check-playlist.mjs",
+    "test:constellation:browser": "node scripts/check-constellation-browser.mjs",
+    "test:audio-speed": "node scripts/check-audio-speed.mjs"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",

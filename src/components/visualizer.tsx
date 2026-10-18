@@ -20,7 +20,14 @@ import {
 } from "@phosphor-icons/react";
 import Knob from "./knob";
 import ScenePicker from "./scene-picker";
+import Playlist from "./playlist";
 import { AudioEngine, type AudioEffect } from "@/lib/audio-engine";
+import {
+  formatTime,
+  isAudioFile,
+  readAudioDuration,
+  type PlaylistTrack,
+} from "@/lib/audio-playlist";
 import { VisualEngine, type VisualSettings } from "@/lib/visual-engine";
 import { VisualPresence, fragmentVisibility } from "@/lib/visual-presence";
 
@@ -45,6 +52,7 @@ const DEFAULTS: VisualSettings = {
   quality: "High",
   preset: 0,
   powered: true,
+  formation: "Auto",
 };
 const EFFECTS: AudioEffect[] = [
   "None",
@@ -60,27 +68,37 @@ function Screw({ position }: { position: string }) {
   return <span className={`screw screw--${position}`} aria-hidden="true" />;
 }
 
-function RadioGroup<T extends string>({
+function OptionGroup<T extends string>({
   label,
   values,
   value,
   onChange,
+  multiple = false,
 }: {
   label: string;
   values: readonly T[];
-  value: T;
+  value: T | readonly T[];
   onChange: (v: T) => void;
+  multiple?: boolean;
 }) {
   return (
-    <fieldset className="radio-group">
+    <fieldset
+      className={`radio-group ${multiple ? "effect-group" : "quality-group"}`}
+    >
       <legend>{label}</legend>
       {values.map((option) => (
         <label key={option} className="radio-option">
           <input
-            type="radio"
+            type={multiple ? "checkbox" : "radio"}
             name={label}
             value={option}
-            checked={value === option}
+            checked={
+              Array.isArray(value)
+                ? option === "None"
+                  ? value.length === 0
+                  : value.includes(option)
+                : value === option
+            }
             onChange={() => onChange(option)}
           />
           <span className="radio-light" />
@@ -208,13 +226,6 @@ function Waveform({
   );
 }
 
-const formatTime = (n: number) =>
-  `${Math.floor(n / 60)
-    .toString()
-    .padStart(2, "0")}:${Math.floor(n % 60)
-    .toString()
-    .padStart(2, "0")}`;
-
 export default function Visualizer() {
   const [settings, setSettings] = useState<VisualSettings>(DEFAULTS);
   const [input, setInput] = useState(50),
@@ -222,12 +233,18 @@ export default function Visualizer() {
   const [drive, setDrive] = useState(0),
     [filter, setFilter] = useState(88),
     [mix, setMix] = useState(35);
-  const [effect, setEffect] = useState<AudioEffect>("Reverb");
+  const [effects, setEffects] = useState<AudioEffect[]>(["Reverb"]);
+  const [audioSpeed, setAudioSpeed] = useState(1);
   const [playing, setPlaying] = useState(false),
     [loading, setLoading] = useState(false);
   const [track, setTrack] = useState("Demo signal"),
     [duration, setDuration] = useState(0),
     [elapsed, setElapsed] = useState(0);
+  const [tracks, setTracks] = useState<PlaylistTrack[]>([]);
+  const [activeTrackId, setActiveTrackId] = useState<string | null>(null);
+  const tracksRef = useRef<PlaylistTrack[]>([]);
+  const activeTrackRef = useRef<string | null>(null);
+  const metadataAbort = useRef<AbortController | null>(null);
   const [error, setError] = useState(""),
     [dragOver, setDragOver] = useState(false),
     [fullscreen, setFullscreen] = useState(false);
@@ -265,12 +282,7 @@ export default function Visualizer() {
               ? `${(20 * Math.log10(signal.rms)).toFixed(1)} dB`
               : "−∞ dB";
       },
-      () => {
-        const engine = audio.current;
-        return engine && engine.duration > 0
-          ? Math.max(0, engine.duration - engine.currentTime)
-          : null;
-      },
+      () => audio.current?.remainingTime ?? null,
       () =>
         audio.current
           ? {
@@ -282,12 +294,14 @@ export default function Visualizer() {
     return () => engine.dispose();
   }, [getAnalyser]);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    metadataAbort.current = new AbortController();
+    return () => {
+      metadataAbort.current?.abort();
       audio.current?.dispose();
-    },
-    [],
-  );
+      audio.current = null;
+    };
+  }, []);
   useEffect(() => {
     if (!playing) return;
     const timer = setInterval(
@@ -308,11 +322,19 @@ export default function Visualizer() {
       engine.setInput(input);
       engine.setOutput(output);
       engine.setFilter(filter);
-      engine.setEffect(effect, mix);
+      engine.setEffects(effects, mix);
       engine.setDrive(drive);
+      engine.setPlaybackRate(audioSpeed);
       engine.onEnded = () => {
         setPlaying(false);
         setElapsed(0);
+        const index = tracksRef.current.findIndex(
+          (item) => item.id === activeTrackRef.current,
+        );
+        const next = tracksRef.current
+          .slice(index + 1)
+          .find((item) => !item.failed);
+        if (index >= 0 && next) void selectTrack(next.id);
       };
       audio.current = engine;
     }
@@ -320,10 +342,11 @@ export default function Visualizer() {
   }
 
   async function togglePlayback() {
+    if (loadingRef.current) return;
     setError("");
     try {
       const engine = getAudio();
-      if (playing) {
+      if (engine.isPlaying) {
         engine.pause();
         setPlaying(false);
       } else {
@@ -336,37 +359,131 @@ export default function Visualizer() {
     }
   }
 
-  async function loadAudio(file?: File) {
-    if (!file || loadingRef.current) return;
-    if (
-      file.type &&
-      !file.type.startsWith("audio/") &&
-      !/\.(mp3|wav|ogg|m4a|flac|aac|aiff|webm)$/i.test(file.name)
-    ) {
-      setError("Choose an audio file: MP3, WAV, FLAC, or M4A.");
-      return;
-    }
+  function changeAudioSpeed(value: number) {
+    setAudioSpeed(value);
+    audio.current?.setPlaybackRate(value);
+  }
+
+  function toggleEffect(effect: AudioEffect) {
+    const next =
+      effect === "None"
+        ? []
+        : effects.includes(effect)
+          ? effects.filter((selected) => selected !== effect)
+          : [...effects, effect];
+    setEffects(next);
+    audio.current?.setEffects(next, mix);
+  }
+
+  function updateTracks(next: PlaylistTrack[]) {
+    tracksRef.current = next;
+    setTracks(next);
+  }
+
+  async function selectTrack(id: string, autoplay = true) {
+    const selected = tracksRef.current.find((item) => item.id === id);
+    if (!selected || loadingRef.current) return;
     loadingRef.current = true;
     setLoading(true);
     setError("");
+    let decoded = false;
     try {
       const engine = getAudio();
-      const seconds = await engine.load(file);
+      engine.pause();
+      setPlaying(false);
+      const seconds = await engine.load(selected.file);
+      if (metadataAbort.current?.signal.aborted) return;
+      decoded = true;
+      activeTrackRef.current = id;
+      setActiveTrackId(id);
       setDuration(seconds);
       setElapsed(0);
-      setTrack(file.name.replace(/\.[^.]+$/, ""));
+      setTrack(selected.name);
+      updateTracks(
+        tracksRef.current.map((item) =>
+          item.id === id ? { ...item, duration: seconds, failed: false } : item,
+        ),
+      );
       update("powered", true);
-      await engine.play();
-      setPlaying(true);
+      if (autoplay) {
+        await engine.play();
+        setPlaying(true);
+      }
     } catch {
-      audio.current?.pause();
-      setError("This audio file could not be opened. Try MP3 or WAV.");
+      if (metadataAbort.current?.signal.aborted) return;
+      if (!decoded)
+        updateTracks(
+          tracksRef.current.map((item) =>
+            item.id === id ? { ...item, failed: true } : item,
+          ),
+        );
+      setError(
+        decoded
+          ? "Audio could not start. Press Play to try again."
+          : `“${selected.name}” could not be opened. Try another track, MP3, or WAV.`,
+      );
       setPlaying(false);
     } finally {
       loadingRef.current = false;
       setLoading(false);
-      if (fileInput.current) fileInput.current.value = "";
     }
+  }
+
+  function loadAudio(files: FileList | File[] | null) {
+    if (!files?.length) return;
+    const accepted = Array.from(files).filter(isAudioFile);
+    if (!accepted.length) {
+      setError("Choose audio files: MP3, WAV, FLAC, or M4A.");
+      return;
+    }
+    const added = accepted.map((file) => ({
+      id: crypto.randomUUID(),
+      file,
+      name: file.name.replace(/\.[^.]+$/, ""),
+      duration: null,
+    }));
+    const hadTracks = tracksRef.current.length > 0;
+    updateTracks([...tracksRef.current, ...added]);
+    if (!hadTracks) void selectTrack(added[0].id);
+    if (accepted.length !== files.length)
+      setError("Only audio files were added to the playlist.");
+
+    // Probe one file at a time, releasing every temporary object URL.
+    const signal = metadataAbort.current?.signal;
+    if (signal)
+      void (async () => {
+        for (const item of added) {
+          if (signal.aborted) break;
+          const seconds = await readAudioDuration(item.file, signal);
+          if (signal.aborted) break;
+          if (seconds !== null)
+            updateTracks(
+              tracksRef.current.map((track) =>
+                track.id === item.id && track.duration === null
+                  ? { ...track, duration: seconds }
+                  : track,
+              ),
+            );
+        }
+      })();
+  }
+
+  function removeTrack(id: string) {
+    if (loadingRef.current) return;
+    const index = tracksRef.current.findIndex((item) => item.id === id);
+    const remaining = tracksRef.current.filter((item) => item.id !== id);
+    updateTracks(remaining);
+    if (id !== activeTrackRef.current) return;
+    const wasPlaying = audio.current?.isPlaying ?? false;
+    audio.current?.clear();
+    activeTrackRef.current = null;
+    setActiveTrackId(null);
+    setPlaying(false);
+    setTrack("Demo signal");
+    setDuration(0);
+    setElapsed(0);
+    const next = remaining[Math.min(index, remaining.length - 1)];
+    if (next) void selectTrack(next.id, wasPlaying);
   }
 
   function changePreset(direction: number) {
@@ -484,6 +601,29 @@ export default function Visualizer() {
                 <span>Off</span>
               </button>
             </div>
+            <div className="audio-speed-control">
+              <label htmlFor="audio-speed">Audio speed</label>
+              <input
+                id="audio-speed"
+                type="range"
+                min="0.5"
+                max="2"
+                step="0.05"
+                value={audioSpeed}
+                aria-label="Audio speed"
+                aria-valuetext={`${audioSpeed.toFixed(2)} times normal speed`}
+                onChange={(event) =>
+                  changeAudioSpeed(Number(event.target.value))
+                }
+              />
+              <button
+                aria-label="Reset audio speed"
+                title="Reset audio speed to 1×"
+                onClick={() => changeAudioSpeed(1)}
+              >
+                {audioSpeed.toFixed(2)}×
+              </button>
+            </div>
           </aside>
 
           <div className="display-column">
@@ -501,123 +641,169 @@ export default function Visualizer() {
               onDrop={(e) => {
                 e.preventDefault();
                 setDragOver(false);
-                void loadAudio(e.dataTransfer.files[0]);
+                loadAudio(e.dataTransfer.files);
               }}
             >
-              <canvas
-                ref={canvas}
-                className="visual-canvas"
-                aria-label={`${settings.mode} audio visualization. ${PRESETS[settings.preset]} preset.`}
-              />
-              <div className="screen-glass" aria-hidden="true" />
-              <i className="reticle reticle--tl" aria-hidden="true" />
-              <i className="reticle reticle--tr" aria-hidden="true" />
-              <i className="reticle reticle--bl" aria-hidden="true" />
-              <i className="reticle reticle--br" aria-hidden="true" />
-              <div className="screen-readout readout--tl" aria-hidden="true">
-                <span>Frequency</span>
-                <span>20</span>
-                <span>200</span>
-                <span>2K</span>
-                <span>20K</span>
-              </div>
-              <div className="screen-readout readout--tr" aria-hidden="true">
-                <span>Spectrum</span>
-                <span>L/R</span>
-                <span>Phase</span>
-                <span>3D</span>
-              </div>
-              <div className="screen-readout readout--bl" aria-hidden="true">
-                <span>Audio</span>
-                <span>Reactive</span>
-                <span>Realtime</span>
-              </div>
-              <div className="screen-readout readout--br" aria-hidden="true">
-                <span>{duration ? "Stereo" : "138 BPM"}</span>
-                <span>{duration ? "Local audio" : "E minor"}</span>
-                <span ref={levelReadout}>−∞ dB</span>
-              </div>
-
-              <div className="transport">
-                <button
-                  className="play-button"
-                  aria-label={playing ? "Pause audio" : "Play audio"}
-                  onClick={() => void togglePlayback()}
-                  disabled={loading}
-                >
-                  {playing ? (
-                    <PauseIcon size={17} weight="fill" />
-                  ) : (
-                    <PlayIcon size={17} weight="fill" />
-                  )}
-                </button>
-                <div className="track-info">
-                  <span className="track-name">
-                    {loading ? "Decoding audio…" : track}
-                  </span>
-                  <div className="track-time">
-                    <span>{formatTime(elapsed)}</span>
-                    <span>{duration ? formatTime(duration) : "138 BPM"}</span>
+              <div
+                className={`visual-layout ${tracks.length > 1 ? "has-playlist" : ""}`}
+              >
+                <div className="visual-stage">
+                  <canvas
+                    ref={canvas}
+                    className="visual-canvas"
+                    aria-label={`${settings.mode} audio visualization. ${PRESETS[settings.preset]} preset.`}
+                  />
+                  <div className="screen-glass" aria-hidden="true" />
+                  <i className="reticle reticle--tl" aria-hidden="true" />
+                  <i className="reticle reticle--tr" aria-hidden="true" />
+                  <i className="reticle reticle--bl" aria-hidden="true" />
+                  <i className="reticle reticle--br" aria-hidden="true" />
+                  <div
+                    className="screen-readout readout--tl"
+                    aria-hidden="true"
+                  >
+                    <span>Frequency</span>
+                    <span>20</span>
+                    <span>200</span>
+                    <span>2K</span>
+                    <span>20K</span>
                   </div>
-                  {duration > 0 && (
-                    <input
-                      type="range"
-                      className="track-seek"
-                      style={
-                        {
-                          "--track-progress": `${Math.min(100, (elapsed / duration) * 100)}%`,
-                        } as CSSProperties
+                  <div
+                    className="screen-readout readout--tr"
+                    aria-hidden="true"
+                  >
+                    <span>Spectrum</span>
+                    <span>L/R</span>
+                    <span>Phase</span>
+                    <span>3D</span>
+                  </div>
+                  <div
+                    className="screen-readout readout--bl"
+                    aria-hidden="true"
+                  >
+                    <span>Audio</span>
+                    <span>Reactive</span>
+                    <span>Realtime</span>
+                  </div>
+                  <div
+                    className="screen-readout readout--br"
+                    aria-hidden="true"
+                  >
+                    <span>
+                      {duration
+                        ? "Stereo"
+                        : `${Math.round(138 * audioSpeed)} BPM`}
+                    </span>
+                    <span>
+                      {duration
+                        ? "Local audio"
+                        : audioSpeed === 1
+                          ? "E minor"
+                          : "Demo audio"}
+                    </span>
+                    <span ref={levelReadout}>−∞ dB</span>
+                  </div>
+
+                  <div className="transport">
+                    <button
+                      className="play-button"
+                      aria-label={playing ? "Pause audio" : "Play audio"}
+                      onClick={() => void togglePlayback()}
+                      disabled={loading}
+                    >
+                      {playing ? (
+                        <PauseIcon size={17} weight="fill" />
+                      ) : (
+                        <PlayIcon size={17} weight="fill" />
+                      )}
+                    </button>
+                    <div className="track-info">
+                      <span className="track-name">
+                        {loading ? "Decoding audio…" : track}
+                      </span>
+                      <div className="track-time">
+                        <span>{formatTime(elapsed)}</span>
+                        <span>
+                          {duration
+                            ? formatTime(duration)
+                            : `${Math.round(138 * audioSpeed)} BPM`}
+                        </span>
+                      </div>
+                      {duration > 0 && (
+                        <input
+                          type="range"
+                          className="track-seek"
+                          style={
+                            {
+                              "--track-progress": `${Math.min(100, (elapsed / duration) * 100)}%`,
+                            } as CSSProperties
+                          }
+                          min="0"
+                          max={duration}
+                          step="0.1"
+                          value={Math.min(elapsed, duration)}
+                          aria-label="Playback position"
+                          onChange={(e: ChangeEvent<HTMLInputElement>) => {
+                            const time = Number(e.target.value);
+                            audio.current?.seek(time);
+                            setElapsed(time);
+                          }}
+                        />
+                      )}
+                    </div>
+                    <button
+                      className="screen-icon-button"
+                      aria-label="Load audio file"
+                      title="Load audio file"
+                      onClick={() => fileInput.current?.click()}
+                      disabled={loading}
+                    >
+                      <UploadSimpleIcon size={16} />
+                    </button>
+                    <button
+                      className="screen-icon-button"
+                      aria-label={
+                        fullscreen ? "Exit fullscreen" : "Fullscreen visualizer"
                       }
-                      min="0"
-                      max={duration}
-                      step="0.1"
-                      value={Math.min(elapsed, duration)}
-                      aria-label="Playback position"
-                      onChange={(e: ChangeEvent<HTMLInputElement>) => {
-                        const time = Number(e.target.value);
-                        audio.current?.seek(time);
-                        setElapsed(time);
-                      }}
-                    />
+                      title="Fullscreen"
+                      onClick={() => void toggleFullscreen()}
+                    >
+                      {fullscreen ? (
+                        <ArrowsInSimpleIcon size={16} />
+                      ) : (
+                        <ArrowsOutSimpleIcon size={16} />
+                      )}
+                    </button>
+                  </div>
+                  {!settings.powered && (
+                    <span className="screen-off-label">Standby</span>
                   )}
                 </div>
-                <button
-                  className="screen-icon-button"
-                  aria-label="Load audio file"
-                  title="Load audio file"
-                  onClick={() => fileInput.current?.click()}
-                >
-                  <UploadSimpleIcon size={16} />
-                </button>
-                <button
-                  className="screen-icon-button"
-                  aria-label={
-                    fullscreen ? "Exit fullscreen" : "Fullscreen visualizer"
-                  }
-                  title="Fullscreen"
-                  onClick={() => void toggleFullscreen()}
-                >
-                  {fullscreen ? (
-                    <ArrowsInSimpleIcon size={16} />
-                  ) : (
-                    <ArrowsOutSimpleIcon size={16} />
-                  )}
-                </button>
+                {tracks.length > 1 && (
+                  <Playlist
+                    tracks={tracks}
+                    activeId={activeTrackId}
+                    playing={playing}
+                    loading={loading}
+                    onSelect={(id) => void selectTrack(id)}
+                    onToggle={() => void togglePlayback()}
+                    onRemove={removeTrack}
+                  />
+                )}
               </div>
               {dragOver && (
                 <div className="drop-prompt">
                   <UploadSimpleIcon size={28} />
-                  <span>Drop audio to play</span>
+                  <span>Drop audio to add tracks</span>
                 </div>
-              )}
-              {!settings.powered && (
-                <span className="screen-off-label">Standby</span>
               )}
             </div>
 
             <ScenePicker
               value={settings.mode}
               onChange={(v) => update("mode", v)}
+              formation={settings.formation ?? "Auto"}
+              onFormationChange={(value) => update("formation", value)}
             />
             <div className="preset-section">
               <span className="section-caption">Presets</span>
@@ -681,23 +867,19 @@ export default function Visualizer() {
               value={mix}
               onChange={(v) => {
                 setMix(v);
-                audio.current?.setEffect(effect, v);
-                audio.current?.setDrive(effect === "Distort" ? v : drive);
+                audio.current?.setEffects(effects, v);
               }}
               start="Dry"
               end="Wet"
             />
-            <RadioGroup
+            <OptionGroup
               label="FX"
               values={EFFECTS}
-              value={effect}
-              onChange={(v) => {
-                setEffect(v);
-                audio.current?.setEffect(v, mix);
-                audio.current?.setDrive(v === "Distort" ? mix : drive);
-              }}
+              value={effects}
+              multiple
+              onChange={toggleEffect}
             />
-            <RadioGroup
+            <OptionGroup
               label="Quality"
               values={["Low", "Medium", "High"] as const}
               value={settings.quality}
@@ -720,12 +902,14 @@ export default function Visualizer() {
               setDrive(0);
               setFilter(88);
               setMix(35);
-              setEffect("Reverb");
+              setEffects(["Reverb"]);
+              changeAudioSpeed(1);
               if (audio.current) {
                 audio.current.setInput(50);
                 audio.current.setOutput(50);
                 audio.current.setFilter(88);
-                audio.current.setEffect("Reverb", 35);
+                audio.current.setDrive(0);
+                audio.current.setEffects(["Reverb"], 35);
               }
             }}
           >
@@ -737,9 +921,13 @@ export default function Visualizer() {
           ref={fileInput}
           className="file-input"
           type="file"
-          accept="audio/*,.mp3,.wav,.ogg,.m4a,.flac,.aac,.aiff"
-          aria-label="Choose an audio file"
-          onChange={(e) => void loadAudio(e.target.files?.[0])}
+          multiple
+          accept="audio/*,.mp3,.wav,.ogg,.m4a,.flac,.aac,.aiff,.aif,.webm"
+          aria-label="Choose audio files"
+          onChange={(e) => {
+            loadAudio(e.target.files);
+            e.target.value = "";
+          }}
         />
         {error && (
           <div className="error-notice" role="alert">

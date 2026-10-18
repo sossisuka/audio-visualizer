@@ -1,4 +1,11 @@
 import type { AudioSignal } from "./audio-analysis";
+export { SYMBOL_FORMATIONS } from "./constellation-symbols";
+import {
+  EXTRA_FORMATIONS,
+  extraFormationFamily,
+  extraFormationPoint,
+  type FormationFamily,
+} from "./constellation-formations";
 
 export const FORMATIONS = [
   "Nebula",
@@ -12,6 +19,7 @@ export const FORMATIONS = [
   "Orbitals",
   "Supernova",
   "Lissajous",
+  ...EXTRA_FORMATIONS,
 ] as const;
 export type Formation = (typeof FORMATIONS)[number];
 export type MorphReason =
@@ -20,7 +28,8 @@ export type MorphReason =
   | "phrase"
   | "section"
   | "evolution"
-  | "seek";
+  | "seek"
+  | "selection";
 export type Vec3 = { x: number; y: number; z: number };
 export type ConstellationSeed = Vec3 & { a: number };
 export type PlaybackPosition = { position: number; duration: number };
@@ -88,7 +97,7 @@ export class ConstellationDirector {
     return {
       from: this.from,
       to: this.to,
-      blend: b * b * b * (b * (b * 6 - 15) + 10),
+      blend: clamp(b * b * b * (b * (b * 6 - 15) + 10)),
       changes: this.changes,
       reason: this.reason,
       phase: this.phase,
@@ -108,6 +117,7 @@ export class ConstellationDirector {
     delta: number,
     playback: PlaybackPosition | null = null,
     reducedMotion = false,
+    selected: Formation | null = null,
   ): ConstellationState {
     const dt = Math.max(0, Math.min(0.25, delta));
     if (playback) {
@@ -187,6 +197,11 @@ export class ConstellationDirector {
       }
     }
     if (this.pending) this.pendingFor += dt;
+    if (selected) {
+      if (this.blend === 1 && this.to !== selected)
+        this.beginMorph(selected, "selection", reducedMotion);
+      return this.state;
+    }
     const minHold = reducedMotion
       ? 8
       : Math.max(3.6, Math.min(6, this.beatPeriod * 8));
@@ -208,24 +223,32 @@ export class ConstellationDirector {
     )
       cue = "evolution";
     if (cue) {
-      this.from = this.to;
-      this.to = this.choose(signal, strength, cue);
-      this.blend = 0;
-      this.duration = reducedMotion
-        ? 5.5
-        : cue === "peak"
-          ? 1.9
-          : 2.6 + (1 - this.energy) * 0.9;
-      this.sinceChange = 0;
-      this.beats = 0;
-      this.pending = null;
-      this.pendingFor = 0;
-      this.reason = cue;
-      this.changes++;
-      this.history.push(this.to);
-      this.history = this.history.slice(-4);
+      this.beginMorph(this.choose(signal, strength, cue), cue, reducedMotion);
     }
     return this.state;
+  }
+
+  private beginMorph(
+    target: Formation,
+    reason: MorphReason,
+    reducedMotion: boolean,
+  ) {
+    this.from = this.to;
+    this.to = target;
+    this.blend = 0;
+    this.duration = reducedMotion
+      ? 5.5
+      : reason === "peak"
+        ? 1.9
+        : 2.6 + (1 - this.energy) * 0.9;
+    this.sinceChange = 0;
+    this.beats = 0;
+    this.pending = null;
+    this.pendingFor = 0;
+    this.reason = reason;
+    this.changes++;
+    this.history.push(this.to);
+    this.history = this.history.slice(-13);
   }
 
   private analyseSpectrum(spectrum: Uint8Array, dt: number) {
@@ -278,7 +301,7 @@ export class ConstellationDirector {
       mid = signal.mid / total,
       treble = signal.treble / total;
     const tonal = 1 - this.entropy;
-    const scores: Record<Formation, number> = {
+    const scores: Partial<Record<Formation, number>> = {
       Nebula: 0.4 + (1 - this.energy) * 3,
       Sphere: 0.7 + tonal * 3 + mid,
       Torus: 0.5 + bass * 5 + tonal,
@@ -291,7 +314,32 @@ export class ConstellationDirector {
       Supernova: 0.3 + strength * 2 + (reason === "peak" ? 9 : 0),
       Lissajous: 0.6 + mid * 3 + this.entropy * 2,
     };
-    const recent = this.history.slice(-3);
+    const familyScores: Record<FormationFamily, number> = {
+      geometry: 0.5 + treble * 5 + signal.flux * 20,
+      knots: 0.6 + mid * 3 + this.entropy * 2,
+      surfaces: 0.7 + mid * 2 + tonal * 2,
+      botanical: 0.6 + treble * 2 + tonal * 3,
+      shells: 0.7 + bass * 2 + tonal * 2,
+      fractals: 0.5 + this.entropy * 4 + strength,
+      astronomy: 0.7 + bass * 3 + (reason === "peak" ? 2 : 0),
+      curves: 0.7 + mid * 3 + tonal,
+      structures: 0.5 + this.entropy * 2 + treble * 3,
+      waves: 0.7 + bass * 2 + mid * 2 + this.energy,
+      scifi: 1 + bass * 3 + this.energy,
+      logos: 1 + mid * 2 + strength,
+      anatomy: 1 + treble * 2 + this.entropy * 2,
+    };
+    const previousFamily = extraFormationFamily(this.to);
+    const weight = (name: Formation) => {
+      const family = extraFormationFamily(name);
+      return (
+        scores[name] ??
+        (family
+          ? familyScores[family] * (family === previousFamily ? 0.4 : 1)
+          : 1)
+      );
+    };
+    const recent = this.history.slice(-12);
     const candidates = FORMATIONS.filter((name) => !recent.includes(name));
     this.randomState =
       (this.randomState * 1664525 +
@@ -301,9 +349,9 @@ export class ConstellationDirector {
       0;
     let cursor =
       (this.randomState / 4294967296) *
-      candidates.reduce((sum, name) => sum + scores[name], 0);
+      candidates.reduce((sum, name) => sum + weight(name), 0);
     for (const name of candidates) {
-      cursor -= scores[name];
+      cursor -= weight(name);
       if (cursor <= 0) return name;
     }
     return candidates[candidates.length - 1];
@@ -334,6 +382,8 @@ export function formationPoint(
   count: number,
   seed: ConstellationSeed,
 ): Vec3 {
+  const extra = extraFormationPoint(form, i, count);
+  if (extra) return extra;
   const u = (i + 0.5) / count,
     angle = u * TAU;
   switch (form) {
@@ -431,4 +481,5 @@ export function formationPoint(
         z: Math.sin(angle * 5) * 0.28,
       };
   }
+  throw new Error(`Unknown constellation formation: ${form}`);
 }

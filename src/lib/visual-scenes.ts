@@ -1,6 +1,7 @@
 import type { AudioSignal } from "./audio-analysis";
 import type { VisualSettings } from "./visual-engine";
 import { fragmentVisibility } from "./visual-presence";
+import { isSymbolFormation } from "./constellation-symbols";
 import {
   formationPoint,
   type ConstellationState,
@@ -123,6 +124,8 @@ export class VisualScenes {
   >();
   private constellationLinkClock = 0;
   private constellationCount = 0;
+  private constellationYaw = 0;
+  private constellationPitch = 0.32;
 
   constructor() {
     let state = 918273;
@@ -585,8 +588,27 @@ export class VisualScenes {
       count = this.count(f, 260);
     const phase = state.phase * (0.4 + f.settings.speed / 70);
     const motion = (f.settings.motion / 100) * (f.reducedMotion ? 0.2 : 1);
-    const yaw = phase * 0.13,
-      pitch = 0.32 + Math.sin(phase * 0.11) * 0.24;
+    // Keep recognizable silhouettes facing the viewer, with eased orientation during morphs.
+    const illustration =
+      (isSymbolFormation(state.from) ? 1 - state.blend : 0) +
+      (isSymbolFormation(state.to) ? state.blend : 0);
+    const orbitYaw = phase * 0.13,
+      frontYaw = Math.sin(phase * 0.13) * 0.22;
+    const desiredYaw = illustration > 0 ? frontYaw : orbitYaw;
+    const desiredPitch =
+      illustration > 0
+        ? 0.08 + Math.sin(phase * 0.11) * 0.06
+        : 0.32 + Math.sin(phase * 0.11) * 0.24;
+    const cameraResponse = signal.active ? 1 - Math.exp(-f.dt / 0.5) : 0;
+    this.constellationYaw +=
+      Math.atan2(
+        Math.sin(desiredYaw - this.constellationYaw),
+        Math.cos(desiredYaw - this.constellationYaw),
+      ) * cameraResponse;
+    this.constellationPitch +=
+      (desiredPitch - this.constellationPitch) * cameraResponse;
+    const yaw = this.constellationYaw,
+      pitch = this.constellationPitch;
     const response = signal.active
       ? 1 - Math.exp(-f.dt / (f.reducedMotion ? 0.4 : 0.13))
       : 0;

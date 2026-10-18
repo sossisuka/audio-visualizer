@@ -5,6 +5,37 @@ import {
   formationPoint,
 } from "../src/lib/constellation";
 import type { AudioSignal } from "../src/lib/audio-analysis";
+import {
+  EXTRA_FORMATIONS,
+  extraFormationFamily,
+} from "../src/lib/constellation-formations";
+import {
+  SYMBOL_FORMATIONS,
+  isSymbolFormation,
+} from "../src/lib/constellation-symbols";
+
+assert.equal(SYMBOL_FORMATIONS.length, 18);
+assert.equal(
+  EXTRA_FORMATIONS.length,
+  118,
+  "Keep the 100 existing additions and add 18 figures",
+);
+assert.equal(FORMATIONS.length, 129);
+assert.equal(
+  new Set(FORMATIONS).size,
+  129,
+  "Every formation needs a unique name",
+);
+const families = new Map<string, number>();
+for (const name of EXTRA_FORMATIONS.filter(
+  (name) => !isSymbolFormation(name),
+)) {
+  const family = extraFormationFamily(name)!;
+  families.set(family, (families.get(family) ?? 0) + 1);
+}
+assert.equal(families.size, 10, "The catalog must span ten geometry families");
+assert.ok([...families.values()].every((count) => count === 10));
+const geometries = new Set<string>();
 
 const silent: AudioSignal = {
   rawRms: 0,
@@ -67,12 +98,39 @@ for (const count of [99, 169, 260])
       ),
       `${form} must have bounded, finite geometry at every quality`,
     );
+    const spans = (["x", "y", "z"] as const)
+      .map(
+        (axis) =>
+          Math.max(...points.map((point) => point[axis])) -
+          Math.min(...points.map((point) => point[axis])),
+      )
+      .sort((a, b) => b - a);
     assert.ok(
-      Math.max(...points.map((p) => p.x)) -
-        Math.min(...points.map((p) => p.x)) >
-        0.8,
-      `${form} must have a visible silhouette`,
+      spans[0] > 0.8 && spans[1] > 0.3,
+      `${form} must have a visible silhouette in at least two dimensions`,
     );
+    assert.ok(
+      new Set(
+        points.map(
+          (point) =>
+            `${point.x.toFixed(4)},${point.y.toFixed(4)},${point.z.toFixed(4)}`,
+        ),
+      ).size >
+        count * 0.45,
+      `${form} must distribute its stars rather than collapse onto a few points`,
+    );
+    if (count === 260) {
+      const signature = points
+        .map((point) =>
+          [point.x, point.y, point.z].map((v) => v.toFixed(5)).join(","),
+        )
+        .join(";");
+      assert.ok(
+        !geometries.has(signature),
+        `${form} must have its own geometry`,
+      );
+      geometries.add(signature);
+    }
   }
 
 function simulate(
@@ -106,7 +164,7 @@ function simulate(
         "An ongoing morph must finish before another begins",
       );
       assert.ok(
-        !changes.slice(-3).some((x) => x.state.to === state.to),
+        !changes.slice(-12).some((x) => x.state.to === state.to),
         "Avoid repeating recent formations",
       );
       changes.push({
@@ -185,6 +243,64 @@ assert.ok(
   "Reduced motion should slow formation changes",
 );
 
+const varied = simulate(bass, 3600, 24);
+assert.ok(
+  new Set(varied.changes.map((change) => change.state.to)).size >= 105,
+  "The music director must actually explore the expanded catalog",
+);
+
+for (const selected of SYMBOL_FORMATIONS) {
+  const manual = new ConstellationDirector();
+  const start = manual.update(bass, spectrum, 1 / 60, null, false, selected);
+  assert.equal(start.to, selected);
+  assert.equal(start.reason, "selection");
+  assert.equal(
+    start.blend,
+    0,
+    "A manual selection must morph instead of teleporting",
+  );
+  for (let frame = 0; frame < 600; frame++)
+    manual.update(
+      { ...bright, onset: frame % 30 === 0 },
+      spectrum,
+      1 / 60,
+      null,
+      false,
+      selected,
+    );
+  assert.equal(
+    manual.state.to,
+    selected,
+    "Peaks must not override a selected figure",
+  );
+  assert.equal(manual.state.changes, 1);
+  assert.equal(manual.state.blend, 1);
+  for (let frame = 0; frame < 900; frame++)
+    manual.update(bass, spectrum, 1 / 60);
+  assert.ok(
+    manual.state.changes > 1,
+    "Auto must resume music-directed choreography",
+  );
+}
+const queued = new ConstellationDirector();
+queued.update(silent, spectrum, 1 / 60, null, false, "Death Star");
+assert.equal(
+  queued.state.to,
+  "Nebula",
+  "A selection during silence must wait for audio",
+);
+queued.update(bass, spectrum, 1 / 60, null, false, "Death Star");
+queued.update(bass, spectrum, 1 / 60, null, false, "Nike Swoosh");
+assert.equal(
+  queued.state.to,
+  "Death Star",
+  "Finish the current morph before the next selection",
+);
+for (let frame = 0; frame < 500; frame++)
+  queued.update(bass, spectrum, 1 / 60, null, false, "Nike Swoosh");
+assert.equal(queued.state.to, "Nike Swoosh");
+assert.equal(queued.state.blend, 1);
+
 const timeline = new ConstellationDirector();
 for (let frame = 0; frame < 600; frame++)
   timeline.update({ ...bass, onset: frame % 30 === 0 }, spectrum, 1 / 60, {
@@ -215,5 +331,5 @@ assert.ok(
 );
 
 console.log(
-  "Passed: 11 bounded formations, musical peak/phrase cues, spectral adaptation, sustained-tone evolution, smooth interpolation, pulse estimation, no recent repeats, silence freeze, seeking, reduced motion, and frame-rate independence.",
+  "Passed: 129 distinct bounded formations across all quality levels, 18 recognizable figures, manual selection and queuing, automatic choreography, musical cues, smooth morphs, no recent repeats, silence freeze, seeking, reduced motion, and frame-rate independence.",
 );

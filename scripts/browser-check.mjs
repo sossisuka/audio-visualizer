@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
-const base = "http://127.0.0.1:43127";
+const base = process.env.VISUALIZER_BASE_URL ?? "http://127.0.0.1:43127";
 const targets = await (await fetch("http://127.0.0.1:9228/json/list")).json();
 const target = targets.find((t) => t.type === "page");
 if (!target) throw new Error("No browser page available");
@@ -267,6 +267,9 @@ await cdp("DOM.setFileInputFiles", {
   nodeId: fileNode.nodeId,
   files: [resolve("artifacts/ending-test.wav")],
 });
+// Subsequent uploads append to the queue and preserve the current track.
+await waitFor(`document.querySelectorAll('.playlist-row').length === 2`);
+await click('.playlist-row:last-child .playlist-track');
 await waitFor(
   `document.querySelector('.track-name').textContent === 'ending-test' && document.querySelector('.visual-canvas').dataset.wavePhase === 'visible'`,
 );

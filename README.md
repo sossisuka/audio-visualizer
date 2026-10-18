@@ -10,8 +10,9 @@ A monochrome, audio-reactive visual instrument built with **Next.js, React, Type
 
 - **Actual audio response.** Visuals measure the same post-effects, post-volume signal sent to the speakers.
 - **Twelve scenes.** Choose circular spectra, particles, blossoms, galaxies, tunnels, constellations, mandalas, terrain, rain, and waveform displays.
-- **Evolving Constellation.** Eleven formations morph according to musical peaks, spectral balance, estimated rhythm, and track progress.
-- **Local playback.** Load or drop an audio file, or start the built-in synthesized electronic demo. Selected files are decoded in the browser.
+- **Evolving Constellation.** 129 formations morph according to musical peaks, spectral balance, estimated rhythm, and track progress. Choose Death Stars, brand logos, skulls, and skeleton hand gestures directly.
+- **Audio speed.** Slow down or speed up files and the synthesized demo from 0.5× to 2×. Seeking and playlist playback follow the selected rate.
+- **Local playback and playlists.** Load or drop multiple audio files, or start the built-in synthesized electronic demo. A numbered playlist shows durations, the active track, and playback/removal options. Tracks advance automatically and files stay in the browser.
 - **Gradual appearance and disappearance.** Visuals emerge with the music and dissolve into randomly scattered fragments when sound stops. Silence leaves no idle waveform or particle sculpture.
 - **Occasional progressive lightning.** Some strikes draw toward their targets, with branches revealing as the parent line reaches them.
 - **Tactile controls.** Matte hardware-style dials, faders, audio effects, presets, keyboard controls, seeking, and fullscreen.
@@ -62,31 +63,34 @@ No environment variables are required for the current application.
 ## Playing music
 
 1. **Press Play** to hear the built-in electronic demo, synthesized at 138 BPM in E minor.
-2. **Load audio** using either upload button, or drop a file onto the display. Successfully decoded files begin playing automatically.
+2. **Load audio** using either upload button, or drop files onto the display. The first track begins playing automatically; later uploads append to the queue and keep the current track playing.
 3. **Choose a scene** below the display. Switching scenes keeps playback running.
 4. **Shape the result** with the dials, faders, presets, and audio effects.
 5. **Seek** with the white timeline when playing a loaded file. The generated demo has no fixed duration or seek bar.
+6. **Adjust Audio speed** below Power in the left control panel, from 0.5× to 2×. Click the rate readout to restore 1×. The selected speed applies in every scene and persists in fullscreen.
 
 The file picker accepts common audio extensions, including MP3, WAV, M4A, OGG, FLAC, AAC, and AIFF. Actual decoding support comes from the browser. WAV or MP3 are useful alternatives if a particular file cannot be opened.
+
+With two or more tracks, the playlist appears beside the visualization, or below it in narrow displays. Select a row to play it; select the active row to pause or resume. The three-dot button offers playback and removal. Playback advances to the next track and stops after the final track. The playlist remains available in fullscreen. Queues last for the current page session; refreshing clears them.
 
 ## Visual scenes
 
 ![All twelve visual scenes captured from the running application](docs/images/scenes.webp)
 
-| Scene             | Appearance and behavior                                                                                                                      |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Orbit**         | A mirrored circular frequency spectrum, an inner waveform ring, rotating arcs, and particles emitted on audio transients. The default scene. |
-| **Senbonzakura**  | Up to a thousand fluttering, notched cherry petals, occasional complete five-petal blossoms, and dispersed petal bursts.                     |
-| **Galaxy**        | A rotating five-arm star field, luminous core, spectral detail, and bass-driven expansion.                                                   |
-| **Warp**          | A twisting perspective tunnel with streaming star trails.                                                                                    |
-| **Constellation** | A connected star mesh that morphs between eleven procedural formations, with travelling pulses and synthesized motion.                       |
-| **Mandala**       | Seven nested spectrum flowers with mirrored geometry. Presets change their symmetry.                                                         |
-| **Terrain**       | A moving wireframe landscape whose peaks respond to frequency energy.                                                                        |
-| **Rain**          | Falling light streaks and elliptical impact ripples shaped by the signal.                                                                    |
-| **Ribbon**        | The original twisting particle sculpture with transient lightning. Internally named `Particle`.                                              |
-| **Wave**          | Eleven layered traces of the actual time-domain waveform.                                                                                    |
-| **Pulse**         | A particle ribbon with stronger bass-driven expansion. Internally named `Beat`.                                                              |
-| **Filament**      | An intricate oscillating particle filament. Internally named `Visual`.                                                                       |
+| Scene             | Appearance and behavior                                                                                                                            |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Orbit**         | A mirrored circular frequency spectrum, an inner waveform ring, rotating arcs, and particles emitted on audio transients. The default scene.       |
+| **Senbonzakura**  | Up to a thousand fluttering, notched cherry petals, occasional complete five-petal blossoms, and dispersed petal bursts.                           |
+| **Galaxy**        | A rotating five-arm star field, luminous core, spectral detail, and bass-driven expansion.                                                         |
+| **Warp**          | A twisting perspective tunnel with streaming star trails.                                                                                          |
+| **Constellation** | A connected star mesh that morphs between 129 formations, including recognizable figures and logos, with travelling pulses and synthesized motion. |
+| **Mandala**       | Seven nested spectrum flowers with mirrored geometry. Presets change their symmetry.                                                               |
+| **Terrain**       | A moving wireframe landscape whose peaks respond to frequency energy.                                                                              |
+| **Rain**          | Falling light streaks and elliptical impact ripples shaped by the signal.                                                                          |
+| **Ribbon**        | The original twisting particle sculpture with transient lightning. Internally named `Particle`.                                                    |
+| **Wave**          | Eleven layered traces of the actual time-domain waveform.                                                                                          |
+| **Pulse**         | A particle ribbon with stronger bass-driven expansion. Internally named `Beat`.                                                                    |
+| **Filament**      | An intricate oscillating particle filament. Internally named `Visual`.                                                                             |
 
 ### Senbonzakura
 
@@ -129,7 +133,35 @@ The director combines several measurements:
 
 These are procedural heuristics. Track progression is divided into eight coarse regions; the app does not label actual verses, choruses, chords, or musical keys.
 
-Formations have a minimum hold interval, an ongoing morph finishes before another starts, and the three most recent formations are excluded from the next choice. Sustained audio can still evolve through a slower cue without inventing drum events.
+The original eleven formations are joined by 100 additions, ten in each family:
+
+| Family                  | Examples                                                            |
+| ----------------------- | ------------------------------------------------------------------- |
+| Polyhedra and prisms    | Tetrahedron, Icosahedron, Dodecahedron, Twisted Prism               |
+| Knots and braids        | Cinquefoil, Septfoil, Celtic Weave, Braided Knot                    |
+| Parametric surfaces     | Mobius Strip, Klein Bottle, Catenoid, Helicoid                      |
+| Botanical forms         | Lotus, Orchid, Sunflower, Fern, Ginkgo                              |
+| Shells and marine forms | Nautilus, Conch, Scallop, Sea Urchin, Jellyfish                     |
+| Fractals and branching  | Sierpinski Tetrahedron, Menger Sponge, Dragon Curve, Coral Branches |
+| Astronomy               | Saturn, Binary Orbit, Armillary, Pulsar, Comet                      |
+| Harmonic curves         | Butterfly, Heart, Infinity, Viviani, Hypotrochoid                   |
+| Spatial structures      | DNA Ladder, Chain, Gyroid, Honeycomb, Geodesic Dome                 |
+| Wave formations         | Ripple Disk, Chladni, Sea Fan, Wave Packet, Aurora Curtain          |
+
+Another 18 figures join the library:
+
+- **Space:** Death Star and an unfinished Death Star II, with a superlaser dish and equatorial trench.
+- **Logos:** Nike Swoosh, Jordan Jumpman, Adidas Stripes, Apple, Mercedes Star, and Audi Rings.
+- **Skulls:** Skull and Skull and Crossbones.
+- **Skeleton hands:** point up, right, or left; peace, rock on, finger gun, thumbs up, and open palm.
+
+Select **Constellation**, then use **Formation** below the scene buttons to choose a figure or any geometric formation. **Auto · follow the music** restores automatic choreography. Selections morph smoothly, stay selected across scene changes, and wait for audio when paused. Reset restores Auto. The detailed figures keep a gentle front-facing orientation so their silhouettes stay readable.
+
+Nike and Jordan outlines were sampled from their [official navigation vectors](https://www.nike.com/jordan), and Apple from its [official site](https://www.apple.com/). The outlines are bundled locally; playback makes no external asset requests.
+
+Formations have a minimum hold interval, an ongoing morph finishes before another starts, and the twelve most recent formations are excluded from the next choice. The selector also reduces the chance of consecutive formations from the same family. Sustained audio can still evolve through a slower cue without inventing drum events.
+
+**Audio speed** changes the actual sound, including pitch, using the Web Audio [playback rate](https://www.w3.org/TR/webaudio-1.1/#dom-audiobuffersourcenode-playbackrate). It applies to uploaded tracks and the demo, survives scene and track changes, and defaults to 1×. Timeline values and playlist durations remain in source seconds; the remaining playback time used for visual fade-out accounts for the selected speed. Reset restores 1×. The visualization reacts to the resulting audio without a separate slow-motion toggle.
 
 Within each shape, additive spectral partials, frequency modulation, actual waveform displacement, and propagating peak fronts animate the stars. The choreography continues following the track while another scene is selected. Pausing freezes both morph progress and synthesis phase. Seeking clears stale rhythm predictions while retaining star identity.
 
@@ -167,8 +199,8 @@ To operate a dial:
 ### Faders and audio effects
 
 - **Filter:** a logarithmically mapped low-pass cutoff, from 20 Hz to 20 kHz.
-- **Mix:** the selected effect's dry/wet amount; also controls drive amount for Distort.
-- **FX:** None, Reverb, Delay, Distort, Chorus, Flanger, or Phaser.
+- **Mix:** the selected effects' dry/wet amount; also controls drive amount for Distort. Wet levels are balanced when several effects are enabled.
+- **FX:** combine Reverb, Delay, Distort, Chorus, Flanger, and Phaser using independent checkboxes. None clears all effects. Turning off the last effect also selects None.
 
 Reverb uses a generated convolution impulse. Delay uses a feedback delay. Chorus, Flanger, and the Phaser-labeled variation use modulated delay configurations; the Phaser variation is not an all-pass filter phaser.
 
@@ -181,6 +213,7 @@ The four presets—**Eternal void**, **Ghost in the signal**, **Static bloom**, 
 | Power        | Turns the visualization on or off; switching off also pauses playback.                   |
 | Play / Pause | Starts or pauses the demo or loaded file. Playing from standby powers the visualizer on. |
 | Timeline     | Seeks within a decoded audio file.                                                       |
+| Audio speed  | Changes audio playback from 0.5× to 2×; clicking its value restores 1×.                  |
 | Load audio   | Opens the local file picker.                                                             |
 | Fullscreen   | Expands the visual display using browser fullscreen or an in-page fallback.              |
 | Reset        | Restores the initial control values, Orbit scene, High quality, and Reverb effect.       |
@@ -241,11 +274,14 @@ flowchart LR
     Input --> Filter[Low-pass filter]
     Filter --> Drive[Waveshaper]
     Drive --> Dry[Dry gain]
-    Drive --> Delay[Modulated feedback delay]
+    Drive --> Delay[Feedback delay]
+    Drive --> Modulation[Parallel Chorus, Flanger, Phaser delays]
     Drive --> Reverb[Convolution reverb]
     Dry --> Output[Output gain]
     Delay --> Wet[Wet gain]
     Wet --> Output
+    Modulation --> ModWet[Independent wet gains]
+    ModWet --> Output
     Reverb --> Output
     Output --> Analyser[Audio analyser]
     Analyser --> Speakers[Speakers]
@@ -273,13 +309,18 @@ src/
     visualizer.tsx           Instrument UI, playback, controls, and file handling
     knob.tsx                 Pointer- and keyboard-operated hardware dial
     scene-picker.tsx         Accessible scene selection
+    playlist.tsx             Responsive queue, track selection, and row actions
   lib/
     audio-engine.ts          Local decoding, demo synthesis, and effects graph
+    audio-playlist.ts        Track types, file validation, and duration metadata
     audio-analysis.ts        Measured signal features and onset detection
     visual-presence.ts       Appearance, silence gate, and finite disappearance
     visual-engine.ts         Canvas lifecycle, original scenes, and lightning
     visual-scenes.ts         Scene catalog and additional scene renderers
     constellation.ts         Musical choreography and procedural formations
+    constellation-formations.ts Expanded geometry catalog with a bounded cache
+    constellation-symbols.ts  Death Stars, logos, skulls, and skeleton hand poses
+    constellation-logo-outlines.json Locally sampled brand silhouettes
 scripts/                     Analysis, lifecycle, geometry, and browser checks
 docs/images/                 Screenshots committed for this README
 public/                      Local texture and browser icon
@@ -289,17 +330,20 @@ design-qa.md                 Implementation and verification notes
 
 ## Development commands
 
-| Command                      | Purpose                                                |
-| ---------------------------- | ------------------------------------------------------ |
-| `bun run dev`                | Start the development server.                          |
-| `bun run build`              | Build the production application and check TypeScript. |
-| `bun run start`              | Serve an existing production build.                    |
-| `bun run typecheck`          | Run TypeScript without emitting files.                 |
-| `bun run lint`               | Run the configured ESLint checks.                      |
-| `bun run test:audio`         | Check audio feature extraction.                        |
-| `bun run test:visual`        | Check appearance and disappearance behavior.           |
-| `bun run test:constellation` | Check formation geometry and choreography.             |
-| `bun run test:scenes`        | Run all-scene browser checks against local Chrome.     |
+| Command                              | Purpose                                                    |
+| ------------------------------------ | ---------------------------------------------------------- |
+| `bun run dev`                        | Start the development server.                              |
+| `bun run build`                      | Build the production application and check TypeScript.     |
+| `bun run start`                      | Serve an existing production build.                        |
+| `bun run typecheck`                  | Run TypeScript without emitting files.                     |
+| `bun run lint`                       | Run the configured ESLint checks.                          |
+| `bun run test:audio`                 | Check audio feature extraction.                            |
+| `bun run test:visual`                | Check appearance and disappearance behavior.               |
+| `bun run test:constellation`         | Check formation geometry and choreography.                 |
+| `bun run test:scenes`                | Run all-scene browser checks against local Chrome.         |
+| `bun run test:playlist`              | Check queue uploads, playback, and responsive layouts.     |
+| `bun run test:constellation:browser` | Check rendered Constellation and its full catalog.         |
+| `bun run test:audio-speed`           | Verify audible speed, timing, seeking, and playlist rates. |
 
 The current dependency versions are Next.js 16.4.2, React 19.3, and TypeScript 5. Icons come from Phosphor. See [`package.json`](package.json) and [`bun.lock`](bun.lock) for the exact dependency configuration.
 
@@ -315,11 +359,11 @@ bun run test:constellation
 bun run build
 ```
 
-| Suite           | Coverage                                                                                                                                                                                                                                   |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Audio analysis  | Frequency isolation, volume response, transient detection, sustained tones, pause release, silence, and quiet float samples.                                                                                                               |
-| Visual presence | Initial invisibility, gradual entry, hysteresis, silence hold, randomized fragment thresholds, exact-zero cleanup, interrupted fades, predicted EOF, reduced motion, and frame-rate independence.                                          |
-| Constellation   | Eleven bounded formations at all quality levels, spectral adaptation, peak/phrase cues, smooth interpolation, pulse estimation, repeat avoidance, sustained-tone evolution, silence freeze, seeking, reduced motion, and 24/60 fps timing. |
+| Suite           | Coverage                                                                                                                                                                                                                                                          |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Audio analysis  | Frequency isolation, volume response, transient detection, sustained tones, pause release, silence, and quiet float samples.                                                                                                                                      |
+| Visual presence | Initial invisibility, gradual entry, hysteresis, silence hold, randomized fragment thresholds, exact-zero cleanup, interrupted fades, predicted EOF, reduced motion, and frame-rate independence.                                                                 |
+| Constellation   | 129 distinct bounded formations at all quality levels, direct figure selection, queued morphs, broad catalog selection, spectral adaptation, musical cues, smooth interpolation, repeat avoidance, silence freeze, seeking, reduced motion, and 24/60 fps timing. |
 
 ### Browser checks
 
@@ -359,6 +403,8 @@ Browser automation uses Chrome's DevTools Protocol directly. It requires a Node.
 `browser-check.mjs` generates WAV fixtures and verifies the complete file-input → audio graph → analyser → canvas path. It covers bass, mids, treble, silent gaps, mute, pause, track endings, waveform cleanup, presets, controls, and responsive widths of 320, 390, 881, and 1440 px.
 
 `test:scenes` checks all twelve scenes for visible animation, monochrome pixels, exact-zero disappearance, particle emission, keyboard scene navigation, uninterrupted playback when switching, mobile touch targets, and reduced motion.
+
+`test:playlist`, `test:constellation:browser`, and `test:audio-speed` use the same Chrome debugging session. They default to `http://localhost:3000`; set `VISUALIZER_BASE_URL` to test another running address. Run them sequentially. The Constellation check saves six contact sheets covering all 118 added shapes, captures selected figures during actual playback, and checks direct selection, quality changes, pause, scene changes, Reset, and six responsive layouts. The playlist check covers multi-select, append, drag-and-drop, durations, active state, removal, EOF, fullscreen, and narrow layouts. Audio-speed checks measure actual output frequencies and playhead progression at 0.5× and 2×, plus pause/resume, seeking, EOF, demo playback, rate persistence across tracks, reset, fullscreen, and mobile layout.
 
 Generated audio fixtures, diagnostic screenshots, and JSON reports are written to `artifacts/`, which is ignored by Git. The screenshots displayed in this README are stored separately in `docs/images/`.
 

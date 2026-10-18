@@ -1,5 +1,92 @@
 # Design and interaction QA
 
+## Latest verification: Death Stars, logos, skulls, and skeleton hands
+
+Added 18 recognizable figures to the existing Constellation library, for 129 total formations. These include Death Star and Death Star II; Nike, Jordan, Adidas, Apple, Mercedes, and Audi marks; Skull and Skull and Crossbones; and eight skeleton hands (point up/right/left, peace, rock on, finger gun, thumbs up, and open palm). Nike/Jordan and Apple contours were sampled from their official site vectors and are bundled locally. All other figures use local procedural geometry.
+
+The Formation selector appears below the scene buttons when Constellation is selected, outside the display. Auto keeps the music-directed choreography; a chosen figure morphs into place and holds while reacting to the audio. Selections made during a morph wait for it to finish, paused selections wait for audio, scene changes preserve the choice, and Reset restores Auto. The camera eases toward a gentle front-facing view for detailed figures, avoiding edge-on logos and sudden rotation changes.
+
+Visually inspected the new contact sheet and actual running-app captures for both Death Stars, Jumpman, skull, skeleton pointing hand, low-quality skull, and mobile rock-on hand. The first Death Star geometry was too generic and crowded its dish with surface points. Reworked it into a spherical relief with a clear silhouette, reserved dish contours, double equatorial trench, and sparse panel lines. Death Star II now has an open upper-right construction section and stepped scaffolding. Space figures use a smaller default radius to leave room for transport controls.
+
+Evidence: `artifacts/constellation-catalog-6.png` shows all 18 additions; `artifacts/constellation-death-star.png`, `constellation-death-star-ii.png`, `constellation-jordan.png`, `constellation-skull.png`, `constellation-point-right.png`, and `constellation-skull-low.png` show real playback at 1440 × 1000 CSS pixels. `artifacts/constellation-expanded-mobile.png` shows the actual 390 × 844 mobile layout, captured as a full document. Device scale factor is 1.
+
+`test:constellation` passes all 129 geometries at 99/169/260 stars, unique names and geometry, bounds, deterministic selection, all 18 direct selections, queued morphs, return to Auto, musical response, pause/silence, seeking, reduced motion, and frame-rate independence. Browser checks cover direct selection of eight figures, completed morphs, quality changes, scene persistence, reset, and clearing the canvas after pause. The selector stays below the display with no horizontal overflow at 1440 × 1000, 1366 × 768, 1024 × 600, 768 × 600, 390 × 844, and 320 × 740; desktop content fits the window. Browser console errors: none. Results are in `artifacts/constellation-expanded-results.json`.
+
+Production build, TypeScript, audio-analysis and visual-presence checks pass. ESLint has zero errors and the same two existing warnings in older browser scripts. React review confirms native labeled selection, stable option keys, controlled state, no new effects or event listeners, and unchanged audio playback behavior.
+
+## Previous verification: multiple FX and audio speed outside the display
+
+FX now uses native checkboxes with square indicators. Reverb, Delay, Distort, Chorus, Flanger, and Phaser can be combined. Each wet effect has an independent signal path; enabling one no longer replaces another's delay configuration. Wet levels are balanced across selected effects. None clears the selection, deselecting the final effect restores None, and Reset restores Reverb. Removing Distort preserves the separate Drive setting. Quality remains a single render setting.
+
+Audio speed is below Power in the left control rail, outside the visual display. Its chosen rate continues to apply in fullscreen. Short desktop layouts use tighter rail spacing; mobile places the slider across the control panel below Power and Filter.
+
+`bun run test:audio-speed` covers selecting all six effects, removing one independently, clearing the selection, keyboard Space activation, reset, and single-selection Quality. Actual Web Audio checks confirm simultaneous wet paths and distortion, independent removal, preserved Drive, audible effect tails after the dry sound ends, and silence after bypass. It also verifies 0.5×/2× audible playback, pause/seek/resume, demo audio, playlist advancement, scene changes, reset, and fullscreen.
+
+Layout checks pass at 1440 × 1000, 1366 × 768, 1024 × 600, 768 × 600, 390 × 844, and 320 × 740 CSS viewports. Audio speed stays inside its rail and outside the display, with no horizontal overflow; desktop content fits the viewport height. Actual desktop and mobile captures were inspected for placement, spacing, selected checkboxes, and readable labels. Evidence: `artifacts/audio-speed-results.json`, `artifacts/audio-speed-desktop.png`, and `artifacts/audio-speed-390.png` / `artifacts/audio-speed-320.png`. Browser console errors: none.
+
+TypeScript, production build, audio analysis, visual presence, all 111 formation checks, and the existing full browser playback regression passed. ESLint reports zero errors and two pre-existing warnings in older browser scripts.
+
+## Previous verification: audio playback speed replaces visual Slow mode
+
+The user's clarification supersedes the earlier visual slowdown work. Removed the Constellation Slow mode toggle, its settings/director/renderer branches, and its dedicated regression script. The 111 formations and normal audio-reactive visualization remain available.
+
+Added an Audio speed slider at the top of the display in every scene and fullscreen: 0.5×–2× in 0.05× steps, with the current rate serving as a 1× reset button. The global Reset also restores 1×. The control uses the existing monochrome mono typography, white slider, neutral border, and visible keyboard focus.
+
+Uploaded files use the actual `AudioBufferSourceNode.playbackRate`. Rate changes preserve source position and the running buffer source. Pausing, seeking, resuming, automatic track advancement, and source-time progress account for the selected rate. Remaining playback time used by the visual exit is converted to wall time. The synthesized demo adjusts note scheduling, oscillator frequencies, and envelope durations. Rate persists across tracks and scenes. Pitch changes with speed.
+
+Evidence: `artifacts/audio-speed-results.json`, `artifacts/audio-speed-desktop.png` (1440 × 1000 CSS viewport), and `artifacts/audio-speed-390.png` / `artifacts/audio-speed-320.png` (390/320 × 844 CSS viewports, full-document captures), all device scale factor 1. Visually inspected the actual desktop and mobile captures: the control fits inside the display, the labels and rate remain legible, and the playlist and transport remain usable. There is no separate source image for this functional replacement; it follows the existing display's style.
+
+`bun run test:audio-speed` measured media progression of exactly 0.5 and 2 source seconds per context second. The same 440 Hz source produced measured output near 211 Hz at half speed and 867 Hz at double speed (zero-crossing estimate over the analyser window). Resume retained 0.75×; demo progression measured 0.5× and 2×; natural EOF fired once. The actual UI passed slower/faster progress, paused rate changes, seeking, rate persistence across automatic track changes, scene changes, both resets, fullscreen, and 320/390 px layouts. The removed visual toggle was absent, and browser console errors were empty.
+
+TypeScript, production build, audio-analysis checks, presence checks, all 111 formation checks, and playlist browser checks passed. ESLint has zero errors; existing warnings in older browser scripts remain. Generated browser-test modules under `artifacts/` are excluded from lint.
+
+final result: passed
+
+## Previous verification: playlist, expanded Constellation, and visual Slow mode
+
+### Slow mode visible-motion correction
+
+The original speed check measured the director's phase, while beat-driven zoom was applied after node smoothing at full speed. A regression using the real Canvas renderer with repeated beat-driven zoom reproduced the user's report: normal star displacement averaged 4.0972 pixels/frame and Slow mode 4.1789, a ratio of 1.0199. Constellation now smooths the final zoom and light response, and its scatter/glitch clock uses the slowed scene phase. The first morph starts on its usual cue for both rhythmic and sustained audio; later holds remain slower.
+
+After the fix, the same controlled renderer test measured 0.4242 pixels/frame in Slow mode, a ratio of 0.1035. `bun run test:slow-mode` also uses a real pointer click in the running application, confirms the button and renderer both enable Slow mode, and confirms audio continues. Evidence: `artifacts/slow-mode-motion-results.json` and `artifacts/slow-mode-fixed-desktop.png`. Constellation unit checks, browser checks, TypeScript, targeted lint, and the production build passed. No UI layout changes were needed.
+
+Source visual truth: the user's inline playlist reference, 1973 × 797 pixels. The source remains an inline attachment; there is no corresponding source file in the checkout. The scope is the playlist within the existing instrument, rather than replacing the instrument's controls or visualization. The existing Constellation reference is `docs/images/constellation.webp` (1200 × 652); the latest request adds 100 geometries and a Slow mode control to that scene.
+
+Rendered evidence:
+
+- `artifacts/playlist-reference-size.png`: 1973 × 797 fullscreen viewport, eleven uploaded tracks, third track active. Source and capture use the same pixel dimensions; device scale factor 1.
+- `artifacts/playlist-detail.png`: focused capture of the playlist for typography, duration alignment, separators, current-row outline, and action icons.
+- `artifacts/playlist-1440.png`, `playlist-1024.png`, `playlist-768.png`, `playlist-390.png`, and `playlist-320.png`: responsive checks at CSS widths 1440, 1024, 768, 390, and 320, device scale factor 1. Mobile captures include the full scrolling instrument, rather than just the viewport.
+- `artifacts/constellation-expanded-desktop.png`: 1440 × 1000 CSS viewport, real demo playback with Slow mode on, device scale factor 1.
+- `artifacts/constellation-expanded-mobile.png`: 390 × 844 CSS viewport, full document capture with Slow mode on, device scale factor 1.
+- `artifacts/constellation-catalog-1.png` through `constellation-catalog-5.png`: five 1200 × 1150 contact sheets rendering all 100 additional geometries from the actual geometry library. These inspect silhouettes; they are not substitutes for the running-app captures.
+
+Comparison and fixes:
+
+- Full-screen playlist capture was reviewed against the inline reference; the focused playlist capture was inspected for small text and icons. The black field, mono uppercase titles, two-digit numbering, right-aligned durations, dotted row separators, vertical divider, current-row border, waveform icon, three-dot actions, count, and footer follow the supplied format. The existing outer instrument and audio-driven particle composition remain intentional differences.
+- Initial queue scrolling subtracted an offset from the wrong coordinate system. Corrected it and verified the final selected track scrolls into the list at 320 px. Menus now render outside the scrolling list so their actions remain accessible near the list boundary.
+- Visually inspected all 100 new silhouettes. Corrected the inverted Heart, expanded the Butterfly sampling interval, and replaced the initial Gyroid approximation with sampled implicit-surface crossings. Regenerated and inspected the affected sheets. There are ten families with ten additional geometries each; they are not rotated copies of a single cloud.
+- Reviewed the existing Constellation imagery with the rendered desktop/mobile implementation. The star-and-link treatment, monochrome light, instrument typography, and audio-driven movement are preserved. The new Slow mode toggle stays within the visual field without covering telemetry or playback controls.
+
+Required fidelity surfaces:
+
+- Typography: existing IBM Plex Mono, uppercase spaced playlist text, readable numbering and tabular durations, title truncation, and matching neutral control labels. Actual filenames replace the reference's sample names.
+- Spacing and layout: playlist shares the display on wide layouts and stacks beneath the visual field when its container is narrow; fullscreen retains both regions. Transport stays within the visualization. No horizontal overflow in the checked layouts.
+- Colors and tokens: black display, neutral gray labels/dividers, white active state and icons. Existing grayscale hardware materials are preserved.
+- Image and geometry quality: procedural Canvas geometry uses stable star indices, bounded coordinates, eased morphing, and a six-entry geometry cache. Existing star counts remain 99/169/260. Icons use the existing Phosphor library.
+- Content: track count, filenames, durations, active state, playback/removal actions, and Slow mode On/Off all reflect current state. Added geometry names cover distinct solid, knot, surface, botanical, shell, fractal, astronomical, curve, structure, and wave families.
+
+Verification evidence:
+
+- `artifacts/playlist-results.json`: multi-select, append without interruption, drag-and-drop, duration metadata, numbering, track selection, pause, menu Escape/focus return, removal, EOF advancement, unreadable-file recovery, fullscreen, responsive layout, and selected-row scrolling passed. Browser console errors: none.
+- `artifacts/constellation-expanded-results.json`: the running renderer selected a new formation, retained phase when switching speed, preserved the toggle across scenes, restored normal speed with Reset, and cleared the canvas fully after pause. The latest two-second samples advanced phase by 1.3148 in normal mode and 0.3887 in Slow mode, a ratio of 0.2956. No mobile horizontal overflow or browser console errors.
+- `bun run test:constellation`: exactly 100 additions and 111 unique names; ten families; finite, bounded, distinct, noncollapsed geometry at all quality levels; broad catalog selection; twelve-choice repeat avoidance; musical timing; 30% visual speed; pause/silence; seeking; reduced motion; and 24/60 fps behavior passed.
+- Audio-analysis checks, visual-presence checks, TypeScript, and production build passed. ESLint reports zero errors and the two existing warnings in the older browser scripts.
+
+No actionable P0/P1/P2 findings remain in the checked scope. Physical touch hardware and Safari remain untested. Comparison is qualitative; no pixel-difference score is claimed for the inline reference or for audio-dependent particle positions.
+
+final result: passed
+
 Source: the user's inline reference image, 881 × 1566 px. The attachment is the visual reference; no source image file was supplied in the checkout. The latest request overrides the original warm palette and outer framing: use monochrome, remove the player's outer borders, make playback icons and the timeline white, and increase wave motion.
 
 Implementation evidence:

@@ -1,7 +1,11 @@
 import { AudioAnalysis, type AudioSignal } from "./audio-analysis";
 import { VisualPresence, fragmentVisibility } from "./visual-presence";
 import { VisualScenes, type VisualMode } from "./visual-scenes";
-import { ConstellationDirector, type PlaybackPosition } from "./constellation";
+import {
+  ConstellationDirector,
+  type Formation,
+  type PlaybackPosition,
+} from "./constellation";
 
 export interface VisualSettings {
   depth: number;
@@ -18,6 +22,7 @@ export interface VisualSettings {
   quality: "Low" | "Medium" | "High";
   preset: number;
   powered: boolean;
+  formation?: Formation | "Auto";
 }
 
 interface Point {
@@ -269,6 +274,7 @@ export class VisualEngine {
       elapsedDelta,
       this.getPlaybackPosition?.() ?? null,
       this.reducedMotion,
+      s.formation === "Auto" ? null : s.formation,
     );
     if (signal.active) {
       this.lastWaveform.set(this.waveform);

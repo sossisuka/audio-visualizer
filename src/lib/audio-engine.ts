@@ -23,8 +23,14 @@ export class AudioEngine {
   private feedback: GainNode;
   private reverb: ConvolverNode;
   private reverbGain: GainNode;
-  private lfo: OscillatorNode;
-  private lfoDepth: GainNode;
+  private modulation: {
+    effect: AudioEffect;
+    wet: GainNode;
+    lfo: OscillatorNode;
+  }[] = [];
+  private effects: readonly AudioEffect[] = ["Reverb"];
+  private effectMix = 35;
+  private driveAmount = 0;
   private timer: ReturnType<typeof setInterval> | null = null;
   private activeVoices = new Set<AudioScheduledSourceNode>();
   private startedAt = 0;
@@ -32,6 +38,7 @@ export class AudioEngine {
   private nextNote = 0;
   private step = 0;
   private playing = false;
+  private rate = 1;
   onEnded?: () => void;
 
   constructor() {
@@ -55,6 +62,8 @@ export class AudioEngine {
     this.feedback = ctx.createGain();
     this.reverb = ctx.createConvolver();
     this.reverbGain = ctx.createGain();
+    this.wet.gain.value = 0;
+    this.reverbGain.gain.value = 0;
     const impulse = ctx.createBuffer(2, ctx.sampleRate * 2, ctx.sampleRate);
     for (let channel = 0; channel < 2; channel++) {
       const data = impulse.getChannelData(channel);
@@ -62,11 +71,6 @@ export class AudioEngine {
         data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / data.length, 3.5);
     }
     this.reverb.buffer = impulse;
-    this.lfo = ctx.createOscillator();
-    this.lfoDepth = ctx.createGain();
-    this.lfo.frequency.value = 0.8;
-    this.lfo.connect(this.lfoDepth).connect(this.delay.delayTime);
-    this.lfo.start();
     this.input.connect(this.filter).connect(this.drive);
     this.drive.connect(this.dry).connect(this.output);
     this.drive.connect(this.delay).connect(this.wet).connect(this.output);
@@ -76,7 +80,30 @@ export class AudioEngine {
       .connect(this.reverbGain)
       .connect(this.output);
     this.output.connect(this.analyser).connect(ctx.destination);
-    this.setEffect("Reverb", 35);
+    this.delay.delayTime.value = (60 / 138) * 0.75;
+    this.feedback.gain.value = 0.38;
+    for (const [effect, delayTime, feedback, rate] of [
+      ["Chorus", 0.025, 0.15, 0.6],
+      ["Flanger", 0.008, 0.65, 0.2],
+      ["Phaser", 0.008, 0.15, 1.3],
+    ] as const) {
+      const delay = ctx.createDelay(1),
+        wet = ctx.createGain(),
+        loop = ctx.createGain(),
+        lfo = ctx.createOscillator(),
+        depth = ctx.createGain();
+      delay.delayTime.value = delayTime;
+      wet.gain.value = 0;
+      loop.gain.value = feedback;
+      lfo.frequency.value = rate;
+      depth.gain.value = 0.003;
+      this.drive.connect(delay).connect(wet).connect(this.output);
+      delay.connect(loop).connect(delay);
+      lfo.connect(depth).connect(delay.delayTime);
+      lfo.start();
+      this.modulation.push({ effect, wet, lfo });
+    }
+    this.setEffects(["Reverb"], 35);
   }
 
   async load(file: File) {
@@ -89,14 +116,25 @@ export class AudioEngine {
     return decoded.duration;
   }
 
+  clear() {
+    this.pause();
+    this.buffer = null;
+    this.position = 0;
+  }
+
   async play() {
     await this.context.resume();
     if (this.playing) return;
+    this.startPlayback();
+  }
+
+  private startPlayback() {
     this.playing = true;
-    this.startedAt = this.context.currentTime - this.position;
+    this.startedAt = this.context.currentTime;
     if (this.buffer) {
       const source = this.context.createBufferSource();
       source.buffer = this.buffer;
+      source.playbackRate.value = this.rate;
       source.connect(this.input);
       source.start(0, this.position);
       source.onended = () => {
@@ -148,9 +186,33 @@ export class AudioEngine {
   }
 
   get currentTime() {
-    return this.playing
-      ? this.context.currentTime - this.startedAt
+    const time = this.playing
+      ? this.position + (this.context.currentTime - this.startedAt) * this.rate
       : this.position;
+    return this.buffer ? Math.min(time, this.buffer.duration) : time;
+  }
+  get playbackRate() {
+    return this.rate;
+  }
+  get remainingTime() {
+    return this.buffer
+      ? Math.max(0, (this.buffer.duration - this.currentTime) / this.rate)
+      : null;
+  }
+  setPlaybackRate(value: number) {
+    if (!Number.isFinite(value)) return;
+    const next = Math.max(0.5, Math.min(2, value));
+    if (next === this.rate) return;
+    const restartDemo = this.playing && !this.buffer;
+    // Keep the source position continuous when changing the rate mid-track.
+    if (restartDemo) this.pause();
+    else if (this.playing) {
+      this.position = this.currentTime;
+      this.startedAt = this.context.currentTime;
+    }
+    this.rate = next;
+    this.source?.playbackRate.setValueAtTime(next, this.context.currentTime);
+    if (restartDemo) this.startPlayback();
   }
   get duration() {
     return this.buffer?.duration ?? 0;
@@ -180,6 +242,14 @@ export class AudioEngine {
     );
   }
   setDrive(value: number) {
+    this.driveAmount = value;
+    this.updateDrive();
+  }
+  private updateDrive() {
+    const value = Math.max(
+      this.driveAmount,
+      this.effects.includes("Distort") ? this.effectMix : 0,
+    );
     if (value <= 0) {
       this.drive.curve = null;
       return;
@@ -192,50 +262,39 @@ export class AudioEngine {
   }
 
   setEffect(effect: AudioEffect, mix: number) {
-    const amount = mix / 100,
+    this.setEffects(effect === "None" ? [] : [effect], mix);
+  }
+
+  setEffects(effects: readonly AudioEffect[], mix: number) {
+    this.effects = effects.filter((effect) => effect !== "None");
+    this.effectMix = mix;
+    const wetCount = this.effects.filter(
+      (effect) => effect !== "Distort",
+    ).length;
+    const amount = mix / 100 / Math.sqrt(Math.max(1, wetCount)),
       now = this.context.currentTime;
     this.dry.gain.setTargetAtTime(
-      effect === "None" ? 1 : 1 - amount * 0.25,
+      this.effects.length === 0 ? 1 : 1 - (mix / 100) * 0.25,
       now,
       0.03,
     );
     this.wet.gain.setTargetAtTime(
-      ["Delay", "Chorus", "Flanger", "Phaser"].includes(effect)
-        ? amount * 0.6
-        : 0,
+      this.effects.includes("Delay") ? amount * 0.6 : 0,
       now,
       0.03,
     );
     this.reverbGain.gain.setTargetAtTime(
-      effect === "Reverb" ? amount * 0.9 : 0,
+      this.effects.includes("Reverb") ? amount * 0.9 : 0,
       now,
       0.03,
     );
-    this.delay.delayTime.setTargetAtTime(
-      effect === "Delay"
-        ? (60 / 138) * 0.75
-        : effect === "Chorus"
-          ? 0.025
-          : 0.008,
-      now,
-      0.03,
-    );
-    this.feedback.gain.setTargetAtTime(
-      effect === "Delay" ? 0.38 : effect === "Flanger" ? 0.65 : 0.15,
-      now,
-      0.03,
-    );
-    this.lfo.frequency.setTargetAtTime(
-      effect === "Phaser" ? 1.3 : effect === "Chorus" ? 0.6 : 0.2,
-      now,
-      0.03,
-    );
-    this.lfoDepth.gain.setTargetAtTime(
-      ["Chorus", "Flanger", "Phaser"].includes(effect) ? 0.003 : 0,
-      now,
-      0.03,
-    );
-    this.setDrive(effect === "Distort" ? mix : 0);
+    for (const branch of this.modulation)
+      branch.wet.gain.setTargetAtTime(
+        this.effects.includes(branch.effect) ? amount * 0.6 : 0,
+        now,
+        0.03,
+      );
+    this.updateDrive();
   }
 
   private tone(
@@ -248,9 +307,10 @@ export class AudioEngine {
     const osc = this.context.createOscillator(),
       envelope = this.context.createGain();
     osc.type = type;
-    osc.frequency.value = frequency;
+    duration /= this.rate;
+    osc.frequency.value = frequency * this.rate;
     envelope.gain.setValueAtTime(0, when);
-    envelope.gain.linearRampToValueAtTime(gain, when + 0.012);
+    envelope.gain.linearRampToValueAtTime(gain, when + 0.012 / this.rate);
     envelope.gain.exponentialRampToValueAtTime(0.0001, when + duration);
     osc.connect(envelope).connect(this.input);
     this.activeVoices.add(osc);
@@ -260,7 +320,7 @@ export class AudioEngine {
       envelope.disconnect();
     };
     osc.start(when);
-    osc.stop(when + duration + 0.02);
+    osc.stop(when + duration + 0.02 / this.rate);
     return osc;
   }
 
@@ -273,7 +333,10 @@ export class AudioEngine {
       const i = this.step % 32;
       if (i % 4 === 0) {
         const kick = this.tone(135, this.nextNote, 0.26, 0.42);
-        kick.frequency.exponentialRampToValueAtTime(38, this.nextNote + 0.2);
+        kick.frequency.exponentialRampToValueAtTime(
+          38 * this.rate,
+          this.nextNote + 0.2 / this.rate,
+        );
       }
       if (i % 2 === 0)
         this.tone(6600 + i * 40, this.nextNote, 0.035, 0.017, "triangle");
@@ -301,14 +364,14 @@ export class AudioEngine {
             0.025,
           );
       }
-      this.nextNote += beat / 2;
+      this.nextNote += beat / 2 / this.rate;
       this.step++;
     }
   }
 
   dispose() {
     this.pause();
-    this.lfo.stop();
+    for (const branch of this.modulation) branch.lfo.stop();
     void this.context.close();
   }
 }
